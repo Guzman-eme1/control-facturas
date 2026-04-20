@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Validación de Facturas - C. Imberton</title>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #1a1a1a; color: white; text-align: center; }
+        .container { padding: 20px; }
+        #reader { width: 100%; max-width: 400px; margin: auto; border-radius: 10px; overflow: hidden; }
+        .barra-progreso { background: #333; border-radius: 20px; height: 30px; margin: 20px 0; overflow: hidden; }
+        #progreso { background: #00ff88; width: 0%; height: 100%; transition: 0.5s; }
+        input { padding: 10px; border-radius: 5px; border: none; width: 60%; }
+        button { padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h3>Control de Liquidación</h3>
+        <input type="text" id="inputEmbarque" placeholder="N° de Embarque">
+        <button onclick="buscarEmbarque()">Cargar</button>
+
+        <div class="barra-progreso">
+            <div id="progreso"></div>
+        </div>
+        <p id="contador">Facturas: 0 / 0</p>
+
+        <div id="reader"></div>
+        <p id="mensaje"></p>
+    </div>
+
+    <script>
+        const URL_GOOGLE = "https://script.google.com/macros/s/AKfycbwid4eManX307JGz9GMLHrA0G6hRKhAWfbmHcGI7MD8QxwSy-xCoD9zbVvuWBYO7wpCJA/exec"; // <--- ¡AQUÍ VA LA URL DEL PASO 1!
+        let listaFacturas = [];
+
+        function buscarEmbarque() {
+            let emb = document.getElementById("inputEmbarque").value;
+            fetch(URL_GOOGLE + "?emb=" + emb)
+                .then(res => res.json())
+                .then(data => {
+                    listaFacturas = data;
+                    actualizarInterfaz();
+                    iniciarCamara();
+                });
+        }
+
+        function iniciarCamara() {
+            const scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
+            scanner.render((text) => {
+                // LIMPIEZA: Extraer solo números del código de barras
+                let soloNumeros = text.replace(/\D/g, "");
+                validarEnSheets(soloNumeros);
+            });
+        }
+
+        function validarEnSheets(numFactura) {
+            fetch(URL_GOOGLE, {
+                method: "POST",
+                body: JSON.stringify({ factura: numFactura })
+            })
+            .then(res => res.json())
+            .then(res => {
+                document.getElementById("mensaje").innerText = res.msg;
+                // Refrescar lista o marcar como éxito visualmente
+            });
+        }
+
+        function actualizarInterfaz() {
+            let total = listaFacturas.length;
+            let validadas = listaFacturas.filter(f => f.estado === "RECIBIDO").length;
+            let porc = (validadas / total) * 100;
+            document.getElementById("progreso").style.width = porc + "%";
+            document.getElementById("contador").innerText = `Facturas: ${validadas} / ${total}`;
+        }
+    </script>
+</body>
+</html>
