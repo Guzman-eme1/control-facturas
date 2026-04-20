@@ -1,77 +1,78 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Validación de Facturas - C. Imberton</title>
+    <title>Validación C. Imberton</title>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #1a1a1a; color: white; text-align: center; }
-        .container { padding: 20px; }
-        #reader { width: 100%; max-width: 400px; margin: auto; border-radius: 10px; overflow: hidden; }
-        .barra-progreso { background: #333; border-radius: 20px; height: 30px; margin: 20px 0; overflow: hidden; }
-        #progreso { background: #00ff88; width: 0%; height: 100%; transition: 0.5s; }
-        input { padding: 10px; border-radius: 5px; border: none; width: 60%; }
-        button { padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 5px; }
+        body { font-family: 'Segoe UI', sans-serif; background: #121212; color: white; margin: 0; padding: 20px; text-align: center; }
+        .card { background: #1e1e1e; padding: 20px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        input { width: 70%; padding: 12px; border-radius: 8px; border: 1px solid #333; background: #252525; color: white; margin-bottom: 10px; }
+        button { padding: 12px 20px; border-radius: 8px; border: none; background: #007bff; color: white; font-weight: bold; cursor: pointer; }
+        .barra-bg { background: #333; border-radius: 20px; height: 25px; margin: 20px 0; }
+        #progreso { background: #00c853; width: 0%; height: 100%; border-radius: 20px; transition: 0.5s; }
+        #reader { width: 100%; max-width: 350px; margin: 15px auto; border-radius: 10px; overflow: hidden; }
+        .lista { text-align: left; margin-top: 20px; }
+        .item-fac { padding: 8px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; }
+        .recibido { color: #00c853; font-weight: bold; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h3>Control de Liquidación</h3>
-        <input type="text" id="inputEmbarque" placeholder="N° de Embarque">
-        <button onclick="buscarEmbarque()">Cargar</button>
+    <div class="card">
+        <h2>Control de Recepción</h2>
+        <input type="text" id="inputBusqueda" placeholder="Emb. o Factura">
+        <button onclick="consultar()">Cargar</button>
 
-        <div class="barra-progreso">
-            <div id="progreso"></div>
-        </div>
-        <p id="contador">Facturas: 0 / 0</p>
+        <div class="barra-bg"><div id="progreso"></div></div>
+        <p id="stats">Esperando datos...</p>
 
         <div id="reader"></div>
-        <p id="mensaje"></p>
+        <div id="listaFacturas" class="lista"></div>
     </div>
 
     <script>
-        const URL_GOOGLE = "https://script.google.com/macros/s/AKfycbwid4eManX307JGz9GMLHrA0G6hRKhAWfbmHcGI7MD8QxwSy-xCoD9zbVvuWBYO7wpCJA/exec"; // <--- ¡AQUÍ VA LA URL DEL PASO 1!
-        let listaFacturas = [];
+        const URL_API = "https://script.google.com/macros/s/AKfycbzPlVT8KfZ393_DZHbQj3SelAXPk_gfGZslYmYNUHAAW52ZHiW-i_agsi0qAX-9-p5-VA/exec";
+        let datosLocales = [];
 
-        function buscarEmbarque() {
-            let emb = document.getElementById("inputEmbarque").value;
-            fetch(URL_GOOGLE + "?emb=" + emb)
-                .then(res => res.json())
-                .then(data => {
-                    listaFacturas = data;
-                    actualizarInterfaz();
-                    iniciarCamara();
-                });
+        async function consultar() {
+            let q = document.getElementById("inputBusqueda").value;
+            if(!q) return;
+            const res = await fetch(URL_API + "?q=" + q);
+            datosLocales = await res.json();
+            dibujarLista();
+            iniciarEscaneo();
         }
 
-        function iniciarCamara() {
+        function iniciarEscaneo() {
             const scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
-            scanner.render((text) => {
-                // LIMPIEZA: Extraer solo números del código de barras
-                let soloNumeros = text.replace(/\D/g, "");
-                validarEnSheets(soloNumeros);
+            scanner.render((codigo) => {
+                let limpio = codigo.replace(/\D/g, "");
+                enviarValidacion(limpio);
             });
         }
 
-        function validarEnSheets(numFactura) {
-            fetch(URL_GOOGLE, {
+        async function enviarValidacion(fac) {
+            const res = await fetch(URL_API, {
                 method: "POST",
-                body: JSON.stringify({ factura: numFactura })
-            })
-            .then(res => res.json())
-            .then(res => {
-                document.getElementById("mensaje").innerText = res.msg;
-                // Refrescar lista o marcar como éxito visualmente
+                body: JSON.stringify({ factura: fac })
             });
+            alert("Procesando factura: " + fac);
+            consultar(); // Recarga para ver el cambio
         }
 
-        function actualizarInterfaz() {
-            let total = listaFacturas.length;
-            let validadas = listaFacturas.filter(f => f.estado === "RECIBIDO").length;
-            let porc = (validadas / total) * 100;
+        function dibujarLista() {
+            let html = "";
+            let validadas = 0;
+            datosLocales.forEach(f => {
+                let clase = f.estado === "RECIBIDO" ? "recibido" : "";
+                if(f.estado === "RECIBIDO") validadas++;
+                html += `<div class="item-fac"><span>FAC: ${f.factura}</span> <span class="${clase}">${f.estado || 'PENDIENTE'}</span></div>`;
+            });
+            document.getElementById("listaFacturas").innerHTML = html;
+            let porc = (validadas / datosLocales.length) * 100 || 0;
             document.getElementById("progreso").style.width = porc + "%";
-            document.getElementById("contador").innerText = `Facturas: ${validadas} / ${total}`;
+            document.getElementById("stats").innerText = `Progreso: ${validadas} / ${datosLocales.length}`;
         }
     </script>
 </body>
