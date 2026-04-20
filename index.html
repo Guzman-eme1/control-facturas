@@ -3,76 +3,116 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Validación C. Imberton</title>
+    <title>Validación Logística</title>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #121212; color: white; margin: 0; padding: 20px; text-align: center; }
-        .card { background: #1e1e1e; padding: 20px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
-        input { width: 70%; padding: 12px; border-radius: 8px; border: 1px solid #333; background: #252525; color: white; margin-bottom: 10px; }
-        button { padding: 12px 20px; border-radius: 8px; border: none; background: #007bff; color: white; font-weight: bold; cursor: pointer; }
-        .barra-bg { background: #333; border-radius: 20px; height: 25px; margin: 20px 0; }
+        body { font-family: 'Segoe UI', sans-serif; background: #121212; color: white; margin: 0; padding: 15px; text-align: center; }
+        .card { background: #1e1e1e; padding: 15px; border-radius: 15px; border: 1px solid #333; }
+        input, textarea { width: 90%; padding: 12px; border-radius: 8px; border: 1px solid #444; background: #252525; color: white; margin-bottom: 10px; }
+        button { padding: 12px 20px; border-radius: 8px; border: none; background: #007bff; color: white; font-weight: bold; cursor: pointer; width: 100%; margin-top: 5px;}
+        .btn-camera { background: #6c757d; margin-bottom: 15px; }
+        .barra-bg { background: #333; border-radius: 20px; height: 15px; margin: 15px 0; }
         #progreso { background: #00c853; width: 0%; height: 100%; border-radius: 20px; transition: 0.5s; }
-        #reader { width: 100%; max-width: 350px; margin: 15px auto; border-radius: 10px; overflow: hidden; }
-        .lista { text-align: left; margin-top: 20px; }
-        .item-fac { padding: 8px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; }
+        #reader { width: 100%; border-radius: 10px; overflow: hidden; background: #000; margin-bottom: 10px; }
+        .item-fac { padding: 10px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; font-size: 0.9em; }
         .recibido { color: #00c853; font-weight: bold; }
+        /* Modal de confirmación */
+        #modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 100; justify-content: center; align-items: center; }
+        .modal-content { background: #252525; padding: 20px; border-radius: 15px; width: 85%; }
     </style>
 </head>
 <body>
     <div class="card">
-        <h2>Control de Recepción</h2>
-        <input type="text" id="inputBusqueda" placeholder="Emb. o Factura">
-        <button onclick="consultar()">Cargar</button>
+        <h3>Recepción C. Imberton</h3>
+        <input type="text" id="inputBusqueda" placeholder="Embarque o Factura">
+        <button onclick="consultar()">1. CARGAR DATOS</button>
 
         <div class="barra-bg"><div id="progreso"></div></div>
-        <p id="stats">Esperando datos...</p>
-
+        
+        <button id="btnCam" class="btn-camera" onclick="controlCamara()">📷 ABRIR CÁMARA</button>
         <div id="reader"></div>
-        <div id="listaFacturas" class="lista"></div>
+
+        <div id="listaFacturas"></div>
+    </div>
+
+    <div id="modal">
+        <div class="modal-content">
+            <h4 id="modalTitulo">Validar Factura</h4>
+            <textarea id="obs" placeholder="Observaciones (Ej: Devolución, daño...)"></textarea>
+            <button style="background: #28a745;" onclick="confirmarEnvio()">CONFIRMAR RECIBIDO</button>
+            <button style="background: #dc3545;" onclick="cerrarModal()">CANCELAR</button>
+        </div>
     </div>
 
     <script>
-        const URL_API = "https://script.google.com/macros/s/AKfycbzPlVT8KfZ393_DZHbQj3SelAXPk_gfGZslYmYNUHAAW52ZHiW-i_agsi0qAX-9-p5-VA/exec";
-        let datosLocales = [];
+        const URL_API = "https://script.google.com/macros/s/AKfycbxz0mNXsq25q_SqQi2DNRq-fHFZUuZooQn6lbHTUK3Tp3GgCXxUyYBhxtyR8umQaqk2lA/exec";
+        let html5QrCode;
+        let facturaPendiente = "";
 
         async function consultar() {
             let q = document.getElementById("inputBusqueda").value;
             if(!q) return;
+            document.getElementById("listaFacturas").innerHTML = "Cargando...";
             const res = await fetch(URL_API + "?q=" + q);
-            datosLocales = await res.json();
-            dibujarLista();
-            iniciarEscaneo();
+            const datos = await res.json();
+            dibujarLista(datos);
         }
 
-        function iniciarEscaneo() {
-            const scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
-            scanner.render((codigo) => {
-                let limpio = codigo.replace(/\D/g, "");
-                enviarValidacion(limpio);
-            });
+        function controlCamara() {
+            const btn = document.getElementById("btnCam");
+            if (!html5QrCode || !html5QrCode.isScanning) {
+                html5QrCode = new Html5Qrcode("reader");
+                html5QrCode.start(
+                    { facingMode: "environment" }, // Solo cámara trasera
+                    { fps: 10, qrbox: 250 },
+                    (codigo) => {
+                        facturaPendiente = codigo.replace(/\D/g, "");
+                        abrirModal();
+                    }
+                );
+                btn.innerText = "❌ CERRAR CÁMARA";
+                btn.style.background = "#dc3545";
+            } else {
+                html5QrCode.stop().then(() => {
+                    btn.innerText = "📷 ABRIR CÁMARA";
+                    btn.style.background = "#6c757d";
+                });
+            }
         }
 
-        async function enviarValidacion(fac) {
-            const res = await fetch(URL_API, {
+        function abrirModal() {
+            document.getElementById("modalTitulo").innerText = "Factura: " + facturaPendiente;
+            document.getElementById("modal").style.display = "flex";
+        }
+
+        function cerrarModal() {
+            document.getElementById("modal").style.display = "none";
+            document.getElementById("obs").value = "";
+        }
+
+        async function confirmarEnvio() {
+            let observacion = document.getElementById("obs").value;
+            document.getElementById("modal").innerHTML = "Enviando...";
+            
+            await fetch(URL_API, {
                 method: "POST",
-                body: JSON.stringify({ factura: fac })
+                body: JSON.stringify({ factura: facturaPendiente, obs: observacion })
             });
-            alert("Procesando factura: " + fac);
-            consultar(); // Recarga para ver el cambio
+            
+            location.reload(); // Recarga para limpiar y actualizar
         }
 
-        function dibujarLista() {
+        function dibujarLista(datos) {
             let html = "";
             let validadas = 0;
-            datosLocales.forEach(f => {
+            datos.forEach(f => {
                 let clase = f.estado === "RECIBIDO" ? "recibido" : "";
                 if(f.estado === "RECIBIDO") validadas++;
                 html += `<div class="item-fac"><span>FAC: ${f.factura}</span> <span class="${clase}">${f.estado || 'PENDIENTE'}</span></div>`;
             });
             document.getElementById("listaFacturas").innerHTML = html;
-            let porc = (validadas / datosLocales.length) * 100 || 0;
+            let porc = (validadas / datos.length) * 100 || 0;
             document.getElementById("progreso").style.width = porc + "%";
-            document.getElementById("stats").innerText = `Progreso: ${validadas} / ${datosLocales.length}`;
         }
     </script>
 </body>
